@@ -1,0 +1,9 @@
+3
+fail_read
+password
+1
+Alice
+F
+25
+1000
+7

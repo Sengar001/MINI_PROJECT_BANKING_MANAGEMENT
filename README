@@ -1,0 +1,99 @@
+SE 731 Project Report: Automated Fuzz Testing of Banking System
+
+Project Title: Robust Fuzz Testing & Code Coverage Analysis of C-Based Banking System Course: CSE 731: Software Testing Submission Date: 26 November 2025
+
+GITHUB:
+
+Team Members:
+
+    [Abhishek Singh Sengar] (Roll No: [MT2024008])
+
+    [Himanshu Rawat] (Roll No: [MT2024057])
+
+1. Introduction
+
+We performed automated Fuzz Testing and Mutation Testing on a legacy C-based Banking Management System. The primary goal was to achieve high code coverage (>80%) for the employee.h module and identify critical security vulnerabilities. We utilized AFL++ for high-speed fuzzing and LCOV/GCOV for line-by-line coverage analysis.
+
+2. Testing Strategy: The "Diamond Harness"
+
+Testing a TCP/IP server usually requires a network connection, which is slow and difficult to fuzz. We re-architected the testing approach by creating a custom "Diamond Harness" (fuzz_target_final.c).
+
+Key Innovations:
+
+    Network Bypass: We converted the server logic into a standalone executable that reads from stdin. The harness intercepts read() calls to inject seed data, simulating user input without network latency.
+
+    File System Mocking: We intercepted open() calls to return a file descriptor pointing to /dev/null. This prevents "Bad File Descriptor" errors and allows write() calls to succeed instantly without modifying actual disk files.
+
+    Trigger-Based Logic Injection: To test hard-to-reach error paths (like "Loan Already Assigned"), the harness detects specific usernames (e.g., admin-loan-assigned) and dynamically alters the in-memory mock state to trigger those failures.
+
+3. Test Case Design (fuzz_inputs/)
+
+We designed a corpus of specific seed files to target logic branches in employee.h.
+
+    Success Seeds: emp_add.txt and mgr_assign.txt verify the "Happy Paths" (adding customers, assigning loans).
+
+    Loop Logic: emp_mod_perfect.txt enters the modification loop and sequentially hits every switch case (Name, Age, Gender) before exiting.
+
+    Failure Triggers: fail_open.txt and fail_sem.txt use specific usernames to force system calls (open, semget) to return error codes, validating the application's error handling logic.
+
+4. Execution & Results
+
+4.1 Execution Metrics (AFL++ Dashboard)
+
+We ran the fuzzer for approximately 50 minutes. The harness proved highly efficient, achieving:
+
+    Total Executions: 21.8 Million
+
+    Execution Speed: ~7,250 executions/sec
+
+    Cycles Done: 83 (The fuzzer cycled through our test cases 83 times)
+
+    Unique Crashes Found: 14
+
+4.2 Code Coverage Analysis
+
+We used LCOV to generate a visual report of the executed code.
+
+    Module Tested: employee.h
+
+    Line Coverage: 71.4% (650 / 910 lines executed)
+
+    Function Coverage: 100.0% (13 / 13 functions executed)
+
+Evidence: The screenshot below demonstrates that our test suite successfully exercised all functions and the majority of the complex logic branches (Blue lines). Red lines indicate "Dead code" or redundant error checks that were unreachable even with forced errors.
+
+4.3 Vulnerability Analysis (Crash Investigation)
+
+AFL++ generated crash files (Signal 11/Segmentation Fault), indicating serious memory corruption issues. Upon analyzing the crash artifacts in fuzz_outputs, we identified the following root causes:
+
+    1. Buffer Overflow & Memory Corruption Many crashes were triggered by extremely long, repetitive strings. This confirms the application reads input into fixed-size buffers without checking the length.
+
+Evidence: Crash file id:000012 contains massive blocks of repeated characters (e.g., RRRRRR...).
+
+Technical Cause: The application likely uses strcpy or read into a small buffer (e.g., 30-100 chars) while the input exceeded this limit, overwriting adjacent stack memory and causing the crash.
+
+    2. Input Parsing Errors Other crashes involved inputs that were structurally valid but contained malformed delimiters, likely confusing the strtok or atoi parsers used in the menu logic.
+
+5. Individual Contributions
+
+[Abhishek Singh Sengar] (Roll: [ MT2024008 ])
+
+    Harness Engineering: Developed fuzz_target_final.c. Implemented the my_read interceptor to handle network input vs. file input. Fixed critical "Bad file descriptor" bugs by redirecting database I/O to /dev/null.
+
+    Environment Setup: Configured the Linux environment (Core patterns) for AFL++ execution.
+
+[Himanshu Rawat] (Roll: [ MT20240057 ])
+
+    Vulnerability Analysis: Analyzed the AFL++ crash outputs to identify the Buffer Overflow vulnerability.
+
+    Test Case Design: Created the library of Seed Inputs (fuzz_inputs), specifically designing "Trigger Usernames" (like admin-loan-assigned) to force the code into the else blocks required for high coverage.
+
+6. AI/LLM Acknowledgment
+
+We utilized an AI LLM (Gemini) to assist in:
+
+    Refactoring the TCP/IP server code into a standalone test harness (fuzz_target_final.c).
+
+    Debugging "Bad file descriptor" errors by suggesting the use of /dev/null for mocked writes.
+
+    Generating shell scripts to automate the creation of the 15+ seed input files.
